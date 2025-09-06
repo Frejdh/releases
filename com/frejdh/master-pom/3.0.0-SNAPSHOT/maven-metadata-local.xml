@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata modelVersion="1.1.0">
+  <groupId>com.frejdh</groupId>
+  <artifactId>master-pom</artifactId>
+  <versioning>
+    <lastUpdated>20250906172955</lastUpdated>
+    <snapshot>
+      <localCopy>true</localCopy>
+    </snapshot>
+    <snapshotVersions>
+      <snapshotVersion>
+        <extension>pom</extension>
+        <value>3.0.0-SNAPSHOT</value>
+        <updated>20250906172955</updated>
+      </snapshotVersion>
+    </snapshotVersions>
+  </versioning>
+  <version>3.0.0-SNAPSHOT</version>
+</metadata>
