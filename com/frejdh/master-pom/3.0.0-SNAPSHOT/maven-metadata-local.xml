@@ -3,7 +3,7 @@
   <groupId>com.frejdh</groupId>
   <artifactId>master-pom</artifactId>
   <versioning>
-    <lastUpdated>20250906172955</lastUpdated>
+    <lastUpdated>20250906182516</lastUpdated>
     <snapshot>
       <localCopy>true</localCopy>
     </snapshot>
@@ -11,7 +11,7 @@
       <snapshotVersion>
         <extension>pom</extension>
         <value>3.0.0-SNAPSHOT</value>
-        <updated>20250906172955</updated>
+        <updated>20250906182516</updated>
       </snapshotVersion>
     </snapshotVersions>
   </versioning>
