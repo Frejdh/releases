@@ -51,6 +51,7 @@
             border-bottom: 1px solid #eaecef;
             display: flex;
             align-items: center;
+            cursor: pointer;
         }
 
         .file-list li:hover {
@@ -92,6 +93,7 @@
             font-size: 14px;
             text-decoration: none;
             display: inline-block;
+            pointer-events: none; /* Let the li handle clicks */
         }
 
         .download-btn:hover {
@@ -154,6 +156,18 @@
         .header-group {
             gap: 0.5rem;
         }
+
+        .clickable-row {
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .cursor-default {
+            cursor: default;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +227,32 @@
     const searchBoxEl = document.getElementById('searchBox');
     const branchSelectorEl = document.getElementById('branchSelector');
 
+    // URL State Management
+    function updateURL(branch, path) {
+        const params = new URLSearchParams();
+        if (branch && branch !== BRANCHES[0].name) {
+            params.set('branch', branch);
+        }
+        if (path) {
+            params.set('path', path);
+        }
+        const queryString = params.toString();
+        const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+        window.history.pushState({branch, path}, '', newUrl);
+    }
+
+    function loadFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const branch = params.get('branch') || BRANCHES[0].name;
+        const path = params.get('path') || '';
+
+        if (BRANCHES.some(b => b.name === branch)) {
+            currentBranch = branch;
+            branchSelectorEl.value = branch;
+        }
+        currentPath = path;
+    }
+
     // Initialize
     function init() {
         // Auto-detect repository from GitHub Pages URL
@@ -221,12 +261,25 @@
         // Populate branch selector
         populateBranchSelector();
 
+        // Load initial state from URL
+        loadFromURL();
+
         // Load initial directory
-        loadDirectory();
+        loadDirectory(currentPath);
 
         // Set up event listeners
         searchBoxEl.addEventListener('input', filterFiles);
         branchSelectorEl.addEventListener('change', changeBranch);
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (event) => {
+            if (event.state) {
+                currentBranch = event.state.branch || BRANCHES[0].name;
+                currentPath = event.state.path || '';
+                branchSelectorEl.value = currentBranch;
+                loadDirectory(currentPath);
+            }
+        });
     }
 
     function autoDetectRepository() {
@@ -259,6 +312,7 @@
     function changeBranch() {
         currentBranch = branchSelectorEl.value;
         currentPath = '';
+        updateURL(currentBranch, currentPath);
         loadDirectory();
     }
 
@@ -273,22 +327,33 @@
 
             const response = await fetch(apiUrl);
 
+            /**
+             * @type {RepositoryContent[] | GithubError}
+             */
+            const untypedContents = await parseJsonOrNull(response);
+
             if (!response.ok) {
                 if (response.status === 404) {
                     throw new Error('Directory not found');
                 }
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                /**
+                 * @type {GithubError}
+                 */
+                const contents = untypedContents;
+                const message = `${contents?.message ?? ''} ${contents?.documentation_url ? `(${contents?.documentation_url})` : ''}`.trim();
+                throw new Error(`HTTP ${response.status}: ${message || response.statusText}`);
             }
 
             /**
              * @type {RepositoryContent[]}
              */
-            const contents = await response.json();
+            const contents = untypedContents;
 
             // Handle both array (directory) and object (file) responses
             if (Array.isArray(contents)) {
                 currentContents = contents;
                 currentPath = path;
+                updateURL(currentBranch, currentPath);
                 renderBreadcrumb();
                 renderFileList(contents);
             } else {
@@ -304,7 +369,7 @@
 
     function renderBreadcrumb() {
         const parts = currentPath.split('/').filter(part => part);
-        let html = '<a href="#" onclick="loadDirectory(\'\'); return false;">📁 Root</a>';
+        let html = '<span class="cursor-default">📁 </span> <a href="#" onclick="loadDirectory(\'\'); return false;">Root</a>';
 
         if (parts.length > 0) {
             html += ' / ';
@@ -318,6 +383,18 @@
         }
 
         breadcrumbEl.innerHTML = html;
+    }
+
+    /**
+     *
+     * @param response {Response}
+     */
+    async function parseJsonOrNull(response) {
+        try {
+            return await response.json();
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     function renderFileList(contents) {
@@ -335,6 +412,21 @@
             const li = document.createElement('li');
             li.className = item.type;
 
+            // Make entire row clickable
+            li.onclick = (e) => {
+                // Don't trigger if clicked on breadcrumb or other interactive elements
+                if (e.target.tagName === 'A' || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') {
+                    return;
+                }
+
+                if (item.type === 'dir') {
+                    const newPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+                    loadDirectory(newPath);
+                } else {
+                    window.open(item.download_url, '_blank');
+                }
+            };
+
             const icon = document.createElement('span');
             icon.className = 'file-icon';
             icon.textContent = item.type === 'dir' ? '📁' : '📄';
@@ -347,24 +439,9 @@
             size.className = 'file-size';
             size.textContent = item.type === 'file' ? formatFileSize(item.size) : '';
 
-            const action = document.createElement('a');
-            action.href = '#';
+            const action = document.createElement('span');
             action.className = 'download-btn';
             action.textContent = item.type === 'dir' ? 'Open' : 'Download';
-
-            if (item.type === 'dir') {
-                action.onclick = (e) => {
-                    e.preventDefault();
-                    const newPath = currentPath ? `${currentPath}/${item.name}` : item.name;
-                    loadDirectory(newPath);
-                };
-            } else {
-                action.href = item.download_url;
-                action.target = '_blank';
-                action.onclick = (e) => {
-                    // Allow default behavior (download)
-                };
-            }
 
             li.appendChild(icon);
             li.appendChild(name);
@@ -421,6 +498,12 @@
 
     // Initialize when page loads
     window.addEventListener('DOMContentLoaded', init);
+
+    // Also handle direct URL access on page load
+    if (window.location.search) {
+        // If there's a query string, parse it immediately
+        loadFromURL();
+    }
 </script>
 </body>
 </html>

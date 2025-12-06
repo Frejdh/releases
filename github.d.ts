@@ -23,3 +23,8 @@ interface RepositoryContent {
 
     url: string;
 }
+
+interface GithubError {
+    message: string;
+    documentation_url?: string;
+}
