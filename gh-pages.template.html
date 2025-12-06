@@ -113,34 +113,66 @@
         }
 
         .search-box {
-            margin: 20px 0;
             padding: 8px;
-            width: 100%;
-            max-width: 400px;
+            min-width: 400px;
+            max-width: 600px;
             border: 1px solid #e1e4e8;
             border-radius: 6px;
             font-size: 14px;
         }
 
         .branch-selector {
-            margin: 10px 0;
             padding: 8px;
             border: 1px solid #e1e4e8;
+            min-width: 6rem;
             border-radius: 6px;
             font-size: 14px;
             background-color: white;
         }
+
+        .header {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .flex-row {
+            display: flex;
+            flex-direction: row;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .item {
+            display: flex;
+            width: fit-content;
+            height: fit-content;
+        }
+
+        .header-group {
+            gap: 0.5rem;
+        }
     </style>
 </head>
 <body>
-<header>
-    <h1>Maven Repository Browser</h1>
-    <p>Browse and download artifacts from the Maven repository</p>
-    <select id="branchSelector" class="branch-selector">
-        <option value="maven">maven branch</option>
-        <!-- Add more branches here as needed -->
-    </select>
-    <input type="text" id="searchBox" class="search-box" placeholder="Search files and directories...">
+<header class="header">
+    <h1>Repository Browser</h1>
+    <p>Browse and download artifacts from the Frejdh repository</p>
+
+    <div class="flex-row header-group">
+        <div class="item">
+            <select id="branchSelector" class="branch-selector">
+                <!-- Generated with the BRANCHES variable -->
+            </select>
+        </div>
+        <div class="item">
+            <input type="text" id="searchBox" class="search-box" placeholder="Filter by files and directories...">
+        </div>
+    </div>
+
+
 </header>
 
 <div id="breadcrumb"></div>
@@ -161,7 +193,7 @@
 
     // 2. Update this array with your branches
     const BRANCHES = [
-        { name: "maven", display: "maven (main)" }
+        {name: "maven", display: "Maven"}
         // Add more branches like:
         // { name: "releases", display: "releases" },
         // { name: "snapshots", display: "snapshots" }
@@ -248,6 +280,9 @@
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
+            /**
+             * @type {RepositoryContent[]}
+             */
             const contents = await response.json();
 
             // Handle both array (directory) and object (file) responses
