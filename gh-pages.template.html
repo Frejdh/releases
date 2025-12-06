@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maven Repository Browser</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #24292e;
+        }
+
+        header {
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #0366d6;
+        }
+
+        #breadcrumb {
+            padding: 10px;
+            background-color: #f6f8fa;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        #breadcrumb a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+
+        #breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .file-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .file-list li {
+            padding: 10px;
+            border-bottom: 1px solid #eaecef;
+            display: flex;
+            align-items: center;
+        }
+
+        .file-list li:hover {
+            background-color: #f6f8fa;
+        }
+
+        .file-icon {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .dir .file-icon {
+            color: #f0c674;
+        }
+
+        .file .file-icon {
+            color: #859900;
+        }
+
+        .file-name {
+            flex: 1;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        .file-size {
+            color: #6a737d;
+            font-size: 14px;
+            margin-right: 15px;
+        }
+
+        .download-btn {
+            background-color: #2ea44f;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .download-btn:hover {
+            background-color: #2c974b;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6a737d;
+        }
+
+        .error {
+            color: #cb2431;
+            padding: 20px;
+            background-color: #ffeef0;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+
+        .search-box {
+            margin: 20px 0;
+            padding: 8px;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .branch-selector {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            font-size: 14px;
+            background-color: white;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Maven Repository Browser</h1>
+    <p>Browse and download artifacts from the Maven repository</p>
+    <select id="branchSelector" class="branch-selector">
+        <option value="maven">maven branch</option>
+        <!-- Add more branches here as needed -->
+    </select>
+    <input type="text" id="searchBox" class="search-box" placeholder="Search files and directories...">
+</header>
+
+<div id="breadcrumb"></div>
+
+<div id="loading" class="loading">
+    Loading directory contents...
+</div>
+
+<div id="error" class="error" style="display: none;"></div>
+
+<ul id="fileList" class="file-list" style="display: none;"></ul>
+
+<script>
+    // HARDCODED CONFIGURATION
+    // ========================
+    // 1. Update this with your GitHub repository
+    const REPOSITORY = 'Frejdh/releases';
+
+    // 2. Update this array with your branches
+    const BRANCHES = [
+        { name: "maven", display: "maven (main)" }
+        // Add more branches like:
+        // { name: "releases", display: "releases" },
+        // { name: "snapshots", display: "snapshots" }
+    ];
+    // ========================
+
+    // State
+    let currentPath = '';
+    let currentBranch = BRANCHES[0].name;
+    let currentContents = [];
+
+    // DOM Elements
+    const breadcrumbEl = document.getElementById('breadcrumb');
+    const fileListEl = document.getElementById('fileList');
+    const loadingEl = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const searchBoxEl = document.getElementById('searchBox');
+    const branchSelectorEl = document.getElementById('branchSelector');
+
+    // Initialize
+    function init() {
+        // Auto-detect repository from GitHub Pages URL
+        autoDetectRepository();
+
+        // Populate branch selector
+        populateBranchSelector();
+
+        // Load initial directory
+        loadDirectory();
+
+        // Set up event listeners
+        searchBoxEl.addEventListener('input', filterFiles);
+        branchSelectorEl.addEventListener('change', changeBranch);
+    }
+
+    function autoDetectRepository() {
+        // If we're on GitHub Pages, try to extract repo info from URL
+        if (window.location.hostname.includes('github.io')) {
+            const pathParts = window.location.pathname.split('/').filter(p => p);
+            if (pathParts.length >= 2) {
+                const owner = pathParts[0];
+                const repo = pathParts[1];
+                // Update the global REPOSITORY if we can detect it
+                window.REPOSITORY = `${owner}/${repo}`;
+                console.log(`Auto-detected repository: ${window.REPOSITORY}`);
+            }
+        }
+    }
+
+    function populateBranchSelector() {
+        branchSelectorEl.innerHTML = '';
+        BRANCHES.forEach(branch => {
+            const option = document.createElement('option');
+            option.value = branch.name;
+            option.textContent = branch.display;
+            if (branch.name === currentBranch) {
+                option.selected = true;
+            }
+            branchSelectorEl.appendChild(option);
+        });
+    }
+
+    function changeBranch() {
+        currentBranch = branchSelectorEl.value;
+        currentPath = '';
+        loadDirectory();
+    }
+
+    async function loadDirectory(path = '') {
+        try {
+            showLoading();
+            hideError();
+
+            // Use detected repository or fall back to hardcoded one
+            const repo = window.REPOSITORY || REPOSITORY;
+            const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}?ref=${currentBranch}`;
+
+            const response = await fetch(apiUrl);
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error('Directory not found');
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const contents = await response.json();
+
+            // Handle both array (directory) and object (file) responses
+            if (Array.isArray(contents)) {
+                currentContents = contents;
+                currentPath = path;
+                renderBreadcrumb();
+                renderFileList(contents);
+            } else {
+                // It's a single file - redirect to raw content
+                window.location.href = contents.download_url;
+            }
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            hideLoading();
+        }
+    }
+
+    function renderBreadcrumb() {
+        const parts = currentPath.split('/').filter(part => part);
+        let html = '<a href="#" onclick="loadDirectory(\'\'); return false;">📁 Root</a>';
+
+        if (parts.length > 0) {
+            html += ' / ';
+            parts.forEach((part, index) => {
+                const path = parts.slice(0, index + 1).join('/');
+                html += `<a href="#" onclick="loadDirectory('${path}'); return false;">${part}</a>`;
+                if (index < parts.length - 1) {
+                    html += ' / ';
+                }
+            });
+        }
+
+        breadcrumbEl.innerHTML = html;
+    }
+
+    function renderFileList(contents) {
+        // Sort: directories first, then files
+        const sortedContents = [...contents].sort((a, b) => {
+            if (a.type === b.type) {
+                return a.name.localeCompare(b.name);
+            }
+            return a.type === 'dir' ? -1 : 1;
+        });
+
+        fileListEl.innerHTML = '';
+
+        sortedContents.forEach(item => {
+            const li = document.createElement('li');
+            li.className = item.type;
+
+            const icon = document.createElement('span');
+            icon.className = 'file-icon';
+            icon.textContent = item.type === 'dir' ? '📁' : '📄';
+
+            const name = document.createElement('span');
+            name.className = 'file-name';
+            name.textContent = item.name;
+
+            const size = document.createElement('span');
+            size.className = 'file-size';
+            size.textContent = item.type === 'file' ? formatFileSize(item.size) : '';
+
+            const action = document.createElement('a');
+            action.href = '#';
+            action.className = 'download-btn';
+            action.textContent = item.type === 'dir' ? 'Open' : 'Download';
+
+            if (item.type === 'dir') {
+                action.onclick = (e) => {
+                    e.preventDefault();
+                    const newPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+                    loadDirectory(newPath);
+                };
+            } else {
+                action.href = item.download_url;
+                action.target = '_blank';
+                action.onclick = (e) => {
+                    // Allow default behavior (download)
+                };
+            }
+
+            li.appendChild(icon);
+            li.appendChild(name);
+            li.appendChild(size);
+            li.appendChild(action);
+
+            fileListEl.appendChild(li);
+        });
+
+        fileListEl.style.display = 'block';
+    }
+
+    function filterFiles() {
+        const searchTerm = searchBoxEl.value.toLowerCase();
+
+        if (!searchTerm) {
+            renderFileList(currentContents);
+            return;
+        }
+
+        const filtered = currentContents.filter(item =>
+                item.name.toLowerCase().includes(searchTerm)
+        );
+
+        renderFileList(filtered);
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function showLoading() {
+        loadingEl.style.display = 'block';
+        fileListEl.style.display = 'none';
+    }
+
+    function hideLoading() {
+        loadingEl.style.display = 'none';
+    }
+
+    function showError(message) {
+        errorEl.textContent = `Error: ${message}`;
+        errorEl.style.display = 'block';
+        fileListEl.style.display = 'none';
+    }
+
+    function hideError() {
+        errorEl.style.display = 'none';
+    }
+
+    // Initialize when page loads
+    window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

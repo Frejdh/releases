@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Maven Repository Browser</title>
+    <style>
+        body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1 { color: #0366d6; }
+        .breadcrumb { background: #f6f8fa; padding: 10px; margin: 10px 0; border-radius: 6px; }
+        .file-list { list-style: none; padding: 0; }
+        .file-list li { padding: 8px; border-bottom: 1px solid #eaecef; display: flex; align-items: center; }
+        .file-list li:hover { background: #f6f8fa; }
+        .icon { margin-right: 10px; }
+        .name { flex: 1; font-family: monospace; }
+        .size { color: #6a737d; margin-right: 15px; }
+        .action { background: #2ea44f; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+    </style>
+</head>
+<body>
+<h1>Maven Repository Browser</h1>
+
+<div>
+    <select id="branch">
+        <option value="maven">maven</option>
+    </select>
+    <input type="text" id="search" placeholder="Search..." style="margin-left: 10px;">
+</div>
+
+<div id="breadcrumb" class="breadcrumb"></div>
+<div id="loading">Loading...</div>
+<ul id="filelist" class="file-list" style="display:none;"></ul>
+
+<script>
+    // CONFIG - EDIT THESE VALUES
+    const REPO = 'Frejdh/releases';  // Change this!
+    const BRANCHES = ['maven'];  // Add more branches if needed
+
+    let currentPath = '';
+    let currentBranch = BRANCHES[0];
+
+    async function loadDir(path = '') {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('filelist').style.display = 'none';
+
+        try {
+            const url = `https://api.github.com/repos/${REPO}/contents/${path}?ref=${currentBranch}`;
+            const response = await fetch(url);
+
+            /**
+             * @type {RepositoryContent[]}
+             */
+            const items = await response.json() ?? [];
+            console.log('response', items);
+
+            currentPath = path;
+            updateBreadcrumb();
+            displayItems(items);
+        } catch (error) {
+            alert('Error loading directory: ' + error.message);
+        }
+    }
+
+    function updateBreadcrumb() {
+        const parts = currentPath.split('/').filter(p => p);
+        let html = '<a href="#" onclick="loadDir(\'\')">📁 Root</a>';
+
+        parts.forEach((part, i) => {
+            const path = parts.slice(0, i + 1).join('/');
+            html += ` / <a href="#" onclick="loadDir('${path}')">${part}</a>`;
+        });
+
+        document.getElementById('breadcrumb').innerHTML = html;
+    }
+
+    /**
+     * @param items {RepositoryContent[]}
+     */
+    function displayItems(items) {
+        const list = document.getElementById('filelist');
+        list.innerHTML = '';
+
+        // Sort: directories first
+        items.sort((a, b) => {
+            if (a.type === b.type) return a.name.localeCompare(b.name);
+            return a.type === 'dir' ? -1 : 1;
+        });
+
+        items.forEach(item => {
+            const li = document.createElement('li');
+
+            const icon = document.createElement('span');
+            icon.className = 'icon';
+            icon.textContent = item.type === 'dir' ? '📁' : '📄';
+1
+            const name = document.createElement('span');
+            name.className = 'name';
+            name.textContent = item.name;
+
+            const size = document.createElement('span');
+            size.className = 'size';
+            size.textContent = item.size ? formatSize(item.size) : '';
+
+            const action = document.createElement('a');
+            action.className = 'action';
+            action.textContent = item.type === 'dir' ? 'Open' : 'Download';
+
+            if (item.type === 'dir') {
+                action.href = '#';
+                action.onclick = () => {
+                    const newPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+                    loadDir(newPath);
+                    return false;
+                };
+            } else {
+                action.href = item.download_url;
+                action.target = '_blank';
+            }
+
+            li.appendChild(icon);
+            li.appendChild(name);
+            li.appendChild(size);
+            li.appendChild(action);
+            list.appendChild(li);
+        });
+
+        document.getElementById('loading').style.display = 'none';
+        list.style.display = 'block';
+    }
+
+    function formatSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Initialize
+    document.getElementById('branch').addEventListener('change', (e) => {
+        currentBranch = e.target.value;
+        currentPath = '';
+        loadDir();
+    });
+
+    document.getElementById('search').addEventListener('input', (e) => {
+        const search = e.target.value.toLowerCase();
+        const items = Array.from(document.querySelectorAll('.file-list li'));
+
+        items.forEach(li => {
+            const name = li.querySelector('.name').textContent.toLowerCase();
+            li.style.display = name.includes(search) ? '' : 'none';
+        });
+    });
+
+    loadDir();
+</script>
+</body>
+</html>
